@@ -1,0 +1,200 @@
+rules_version = '2';
+// Admin ve y cambia todo el negocio.
+// Cobrador solo lee su ruta y anota cobros. No crea clientes, rutas, préstamos ni usuarios.
+// El primer administrador se crea una sola vez, mientras no exista config/sistema.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function perfilRef() {
+      return /databases/$(database)/documents/perfiles/$(request.auth.uid);
+    }
+
+    function tienePerfil() {
+      return signedIn() && exists(perfilRef());
+    }
+
+    function perfil() {
+      return get(perfilRef()).data;
+    }
+
+    function esAdmin() {
+      return tienePerfil() && perfil().rol == 'admin';
+    }
+
+    function esCobrador() {
+      return tienePerfil() && perfil().rol == 'cobrador';
+    }
+
+    function rutaAsignada(rutaId) {
+      return esCobrador()
+        && perfil().rutaIds is list
+        && rutaId in perfil().rutaIds;
+    }
+
+    function puedeVerRuta(rutaId) {
+      return esAdmin() || rutaAsignada(rutaId);
+    }
+
+    function prestamo(prestamoId) {
+      return get(/databases/$(database)/documents/prestamos/$(prestamoId)).data;
+    }
+
+    match /config/sistema {
+      allow read: if true;
+      allow create: if signedIn()
+        && !exists(/databases/$(database)/documents/config/sistema)
+        && request.resource.data.keys().hasOnly(['adminListo'])
+        && request.resource.data.adminListo == true;
+      allow update, delete: if false;
+    }
+
+    match /perfiles/{uid} {
+      allow get: if signedIn() && (request.auth.uid == uid || esAdmin());
+      allow list: if esAdmin();
+
+      allow create: if signedIn()
+        && request.auth.uid == uid
+        && !exists(/databases/$(database)/documents/config/sistema)
+        && request.resource.data.rol == 'admin'
+        && request.resource.data.usuario is string
+        && request.resource.data.nombre is string
+        && request.resource.data.rutaIds == [];
+
+      allow create: if esAdmin()
+        && request.resource.data.rol == 'cobrador'
+        && request.resource.data.usuario is string
+        && request.resource.data.nombre is string
+        && request.resource.data.rutaIds is list;
+
+      allow update: if esAdmin()
+        && request.resource.data.rol == resource.data.rol
+        && request.resource.data.usuario == resource.data.usuario
+        && request.resource.data.nombre is string
+        && request.resource.data.rutaIds is list;
+
+      allow delete: if false;
+    }
+
+    match /rutas/{rutaId} {
+      allow get: if puedeVerRuta(rutaId);
+      allow list: if esAdmin();
+      allow create: if esAdmin()
+        && request.resource.data.keys().hasOnly(['nombre', 'creadoEn'])
+        && request.resource.data.nombre is string
+        && request.resource.data.nombre.size() > 0
+        && request.resource.data.nombre.size() <= 60;
+      allow update: if esAdmin()
+        && request.resource.data.nombre is string
+        && request.resource.data.nombre.size() > 0
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nombre']);
+      allow delete: if false;
+    }
+
+    match /clientes/{clienteId} {
+      allow get: if esAdmin() || (esCobrador() && rutaAsignada(resource.data.rutaId));
+      allow list: if esAdmin() || (esCobrador() && resource.data.rutaId in perfil().rutaIds);
+
+      allow create: if esAdmin()
+        && request.resource.data.keys().hasOnly([
+          'nombre', 'identificacion', 'telefono', 'puntoReferencia', 'rutaId', 'creadoEn'
+        ])
+        && request.resource.data.nombre is string
+        && request.resource.data.nombre.size() > 0
+        && request.resource.data.nombre.size() <= 80
+        && request.resource.data.identificacion is string
+        && request.resource.data.identificacion.size() > 0
+        && request.resource.data.identificacion.size() <= 30
+        && request.resource.data.telefono is string
+        && request.resource.data.puntoReferencia is string
+        && request.resource.data.rutaId is string;
+
+      allow update: if esAdmin()
+        && request.resource.data.nombre is string
+        && request.resource.data.nombre.size() > 0
+        && request.resource.data.identificacion is string
+        && request.resource.data.identificacion.size() > 0
+        && request.resource.data.rutaId is string
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['nombre', 'identificacion', 'telefono', 'puntoReferencia', 'rutaId']);
+
+      allow delete: if false;
+    }
+
+    match /prestamos/{prestamoId} {
+      allow get: if esAdmin() || (esCobrador() && rutaAsignada(resource.data.rutaId));
+      allow list: if esAdmin() || (esCobrador() && resource.data.rutaId in perfil().rutaIds);
+
+      allow create: if esAdmin()
+        && request.resource.data.keys().hasOnly([
+          'clienteId', 'clienteNombre', 'identificacion', 'rutaId', 'fechaInicio',
+          'montoEntregado', 'porcentajeRedito', 'redito', 'total', 'cuota',
+          'cuotaUltima', 'numeroCuotas', 'frecuencia', 'saldo', 'creadoEn'
+        ])
+        && request.resource.data.frecuencia in ['diario', 'semanal']
+        && request.resource.data.montoEntregado is int
+        && request.resource.data.montoEntregado > 0
+        && request.resource.data.porcentajeRedito is int
+        && request.resource.data.porcentajeRedito >= 0
+        && request.resource.data.porcentajeRedito <= 300
+        && request.resource.data.redito is int
+        && request.resource.data.redito >= 0
+        && request.resource.data.total is int
+        && request.resource.data.total == request.resource.data.montoEntregado + request.resource.data.redito
+        && request.resource.data.numeroCuotas is int
+        && request.resource.data.numeroCuotas > 0
+        && request.resource.data.numeroCuotas <= 400
+        && request.resource.data.cuota is int
+        && request.resource.data.cuota > 0
+        && request.resource.data.cuotaUltima is int
+        && request.resource.data.cuotaUltima > 0
+        && request.resource.data.saldo == request.resource.data.total;
+
+      allow update: if esAdmin()
+        || (esCobrador()
+          && rutaAsignada(resource.data.rutaId)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['saldo'])
+          && request.resource.data.saldo is int
+          && request.resource.data.saldo >= 0
+          && request.resource.data.saldo < resource.data.saldo);
+
+      allow delete: if false;
+    }
+
+    match /pagos/{pagoId} {
+      allow get: if esAdmin() || (esCobrador() && rutaAsignada(resource.data.rutaId));
+      allow list: if esAdmin() || (esCobrador() && resource.data.rutaId in perfil().rutaIds);
+
+      allow create: if (esAdmin() || rutaAsignada(request.resource.data.rutaId))
+        && request.resource.data.keys().hasOnly([
+          'prestamoId', 'clienteId', 'clienteNombre', 'rutaId', 'fecha', 'monto',
+          'cobradorId', 'cobradorNombre', 'anulado', 'creadoEn'
+        ])
+        && request.resource.data.prestamoId is string
+        && request.resource.data.clienteId is string
+        && request.resource.data.rutaId is string
+        && request.resource.data.fecha is string
+        && request.resource.data.monto is int
+        && request.resource.data.monto > 0
+        && request.resource.data.cobradorId == request.auth.uid
+        && request.resource.data.cobradorNombre is string
+        && request.resource.data.anulado == false
+        && prestamo(request.resource.data.prestamoId).rutaId == request.resource.data.rutaId
+        && prestamo(request.resource.data.prestamoId).clienteId == request.resource.data.clienteId
+        && request.resource.data.monto <= prestamo(request.resource.data.prestamoId).saldo;
+
+      allow update: if esAdmin()
+        && resource.data.anulado == false
+        && request.resource.data.anulado == true
+        && request.resource.data.monto == resource.data.monto
+        && request.resource.data.prestamoId == resource.data.prestamoId
+        && request.resource.data.rutaId == resource.data.rutaId
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['anulado', 'anuladoEn', 'anuladoPor']);
+
+      allow delete: if false;
+    }
+  }
+}
