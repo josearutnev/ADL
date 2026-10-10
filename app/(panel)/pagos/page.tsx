@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { useMemo, useState } from "react"
 import { toast } from "sonner"
+import { BotonComprobante } from "@/components/boton-comprobante"
 import { nombreRuta, useVista } from "@/components/datos-provider"
 import { Cargando, ErrorBloque, Vacio } from "@/components/estados"
 import { SelectorRuta } from "@/components/selector-ruta"
@@ -14,7 +15,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { atrasoDe, hoyLocal } from "@/lib/calculo"
+import { atrasoDe, hoyLocal, saldoTrasPago } from "@/lib/calculo"
+import { cargarLogo, datosPagoPdf, nombrePdf, pdfPago } from "@/lib/comprobante"
 import { anularPago } from "@/lib/datos"
 import { mensajeError } from "@/lib/errores"
 import { fechaCorta, pesos } from "@/lib/formato"
@@ -139,11 +141,27 @@ export default function Pagos() {
               <p className="text-base text-muted-foreground">
                 {fechaCorta(pago.fecha)} · Cobró {pago.cobradorNombre} · {nombreRuta(vista.rutas, pago.rutaId)}
               </p>
-              {perfil.rol === "admin" && !pago.anulado ? (
-                <Button type="button" variant="outline" className="mt-3" onClick={() => setAnular(pago)}>
-                  Anular
-                </Button>
-              ) : null}
+              <div className="mt-3 grid gap-2">
+                <BotonComprobante
+                  nombre={nombrePdf("pago", pago.clienteNombre)}
+                  crear={async () => {
+                    const prestamo = (vista.prestamos ?? []).find((item) => item.id === pago.prestamoId)
+                    const saldo = prestamo
+                      ? saldoTrasPago(
+                          prestamo.total,
+                          pago.id,
+                          (vista.pagos ?? []).filter((item) => item.prestamoId === prestamo.id),
+                        )
+                      : 0
+                    return pdfPago(datosPagoPdf(pago, saldo), await cargarLogo())
+                  }}
+                />
+                {perfil.rol === "admin" && !pago.anulado ? (
+                  <Button type="button" variant="outline" onClick={() => setAnular(pago)}>
+                    Anular
+                  </Button>
+                ) : null}
+              </div>
             </li>
           ))}
         </ul>

@@ -3,11 +3,13 @@
 import { useRouter, useSearchParams } from "next/navigation"
 import { useMemo, useState } from "react"
 import { toast } from "sonner"
+import { BotonComprobante } from "@/components/boton-comprobante"
 import { BuscarSelect } from "@/components/buscar-select"
-import { useDatos } from "@/components/datos-provider"
+import { nombreRuta, useDatos } from "@/components/datos-provider"
 import { Campo, Cargando, Vacio } from "@/components/estados"
 import { FormularioCliente } from "@/components/formulario-cliente"
 import { Button } from "@/components/ui/button"
+import { cargarLogo, nombrePdf, pdfPrestamo, type DatosPrestamoPdf } from "@/lib/comprobante"
 import {
   Dialog,
   DialogContent,
@@ -41,6 +43,7 @@ export function FormularioPrestamo() {
   const [nuevo, setNuevo] = useState(false)
   const [error, setError] = useState("")
   const [guardando, setGuardando] = useState(false)
+  const [guardado, setGuardado] = useState<{ id: string; pdf: DatosPrestamoPdf } | null>(null)
 
   const calculo = useMemo(
     () => calcularPrestamo(Number(soloDigitos(monto)), Number(soloDigitos(porcentaje)), Number(soloDigitos(cuotas))),
@@ -60,6 +63,24 @@ export function FormularioPrestamo() {
     )
   }
   if (!datos.clientes || !datos.rutas) return <Cargando />
+  if (guardado) {
+    return (
+      <div className="grid gap-5">
+        <h1 className="text-3xl font-extrabold">Préstamo guardado</h1>
+        <p className="text-lg leading-relaxed">
+          {guardado.pdf.cliente}. Total {pesos(guardado.pdf.total)}, cuota {pesos(guardado.pdf.cuota)}.
+        </p>
+        <BotonComprobante
+          variante="default"
+          nombre={nombrePdf("prestamo", guardado.pdf.cliente)}
+          crear={async () => pdfPrestamo(guardado.pdf, await cargarLogo())}
+        />
+        <Button type="button" size="lg" variant="outline" onClick={() => router.push(`/prestamos/${guardado.id}`)}>
+          Ver el préstamo
+        </Button>
+      </div>
+    )
+  }
 
   async function guardar() {
     if (!cliente || !calculo || !fecha) {
@@ -81,8 +102,23 @@ export function FormularioPrestamo() {
         numeroCuotas: calculo.numeroCuotas,
         frecuencia,
       })
+      const pdf: DatosPrestamoPdf = {
+        cliente: cliente.nombre,
+        identificacion: cliente.identificacion,
+        ruta: nombreRuta(datos.rutas, cliente.rutaId),
+        fechaInicio: fecha,
+        montoEntregado: calculo.entregado,
+        porcentaje: calculo.porcentaje,
+        redito: calculo.redito,
+        total: calculo.total,
+        numeroCuotas: calculo.numeroCuotas,
+        frecuencia,
+        cuota: calculo.cuota,
+        cuotaUltima: calculo.cuotaUltima,
+      }
       toast.success("Préstamo guardado")
-      router.push(`/prestamos/${id}`)
+      setGuardado({ id, pdf })
+      setGuardando(false)
     } catch (fallo) {
       setError(fallo instanceof Error ? fallo.message : "No se pudo guardar.")
       setGuardando(false)

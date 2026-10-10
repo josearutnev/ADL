@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useParams } from "next/navigation"
 import { useState } from "react"
 import { toast } from "sonner"
+import { BotonComprobante } from "@/components/boton-comprobante"
 import { nombreRuta, useDatos } from "@/components/datos-provider"
 import { DialogoCobro } from "@/components/dialogo-cobro"
 import { Cargando, ErrorBloque, Vacio } from "@/components/estados"
@@ -15,7 +16,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { atrasoDe, fechasCuotas, hoyLocal } from "@/lib/calculo"
+import { atrasoDe, fechasCuotas, hoyLocal, saldoTrasPago } from "@/lib/calculo"
+import { cargarLogo, datosPagoPdf, datosPrestamoPdf, nombrePdf, pdfPago, pdfPrestamo } from "@/lib/comprobante"
 import { anularPago } from "@/lib/datos"
 import { mensajeError } from "@/lib/errores"
 import { fechaBonita, fechaCorta, pesos } from "@/lib/formato"
@@ -100,6 +102,12 @@ export default function FichaPrestamo() {
       ) : (
         <p className="text-lg font-bold text-muted-foreground">Al día</p>
       )}
+      <BotonComprobante
+        nombre={nombrePdf("prestamo", prestamo.clienteNombre)}
+        crear={async () =>
+          pdfPrestamo(datosPrestamoPdf(prestamo, nombreRuta(datos.rutas, prestamo.rutaId)), await cargarLogo())
+        }
+      />
       {prestamo.saldo > 0 ? (
         <Button type="button" size="lg" onClick={() => setCobroAbierto(true)}>
           Cobré
@@ -124,11 +132,29 @@ export default function FichaPrestamo() {
               <p className="text-base text-muted-foreground">
                 {fechaCorta(pago.fecha)} · Cobró {pago.cobradorNombre}
               </p>
-              {perfil.rol === "admin" && !pago.anulado ? (
-                <Button type="button" variant="outline" className="mt-3" onClick={() => setAnular(pago)}>
-                  Anular
-                </Button>
-              ) : null}
+              <div className="mt-3 grid gap-2">
+                <BotonComprobante
+                  nombre={nombrePdf("pago", pago.clienteNombre)}
+                  crear={async () =>
+                    pdfPago(
+                      datosPagoPdf(
+                        pago,
+                        saldoTrasPago(
+                          prestamo.total,
+                          pago.id,
+                          pagos.filter((item) => item.prestamoId === prestamo.id),
+                        ),
+                      ),
+                      await cargarLogo(),
+                    )
+                  }
+                />
+                {perfil.rol === "admin" && !pago.anulado ? (
+                  <Button type="button" variant="outline" onClick={() => setAnular(pago)}>
+                    Anular
+                  </Button>
+                ) : null}
+              </div>
             </article>
           ))
         )}

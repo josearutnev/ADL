@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start -H 0.0.0.0 -p 43123",
     "lint": "eslint",
-    "test": "node --experimental-strip-types --test lib/calculo.test.ts"
+    "test": "node --experimental-strip-types --test lib/calculo.test.ts lib/entregar-pdf.test.ts lib/comprobante.test.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",
@@ -17,6 +17,7 @@
     "lucide-react": "^1.54.0",
     "next": "16.4.0",
     "next-themes": "^0.4.6",
+    "pdf-lib": "^1.17.1",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "shadcn": "^4.21.4",

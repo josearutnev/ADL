@@ -5,7 +5,9 @@ import {
   calcularPrestamo,
   esDomingo,
   fechasCuotas,
+  saldoTrasPago,
   sigueDebiendo,
+  tablaCuotas,
   tocaHoy,
 } from "./calculo.ts"
 
@@ -81,6 +83,55 @@ describe("fechas y atraso", () => {
     const despues = { ...base, saldo: base.saldo - 200 }
     assert.equal(despues.cuota, base.cuota)
     assert.equal(atrasoDe(despues, "2026-10-10"), 300)
+  })
+
+  it("la tabla usa la última cuota y salta el domingo", () => {
+    const calculo = calcularPrestamo(10000, 10, 3)
+    assert.ok(calculo)
+    const filas = tablaCuotas({
+      fechaInicio: "2026-10-09",
+      numeroCuotas: calculo.numeroCuotas,
+      frecuencia: "diario",
+      cuota: calculo.cuota,
+      cuotaUltima: calculo.cuotaUltima,
+    })
+    assert.deepEqual(
+      filas.map((fila) => fila.fecha),
+      ["2026-10-09", "2026-10-10", "2026-10-12"],
+    )
+    assert.deepEqual(
+      filas.map((fila) => fila.valor),
+      [3666, 3666, 3668],
+    )
+    assert.equal(
+      filas.reduce((suma, fila) => suma + fila.valor, 0),
+      calculo.total,
+    )
+  })
+
+  it("el semanal repite el mismo día en la tabla", () => {
+    const filas = tablaCuotas({
+      fechaInicio: "2026-10-11",
+      numeroCuotas: 2,
+      frecuencia: "semanal",
+      cuota: 100,
+      cuotaUltima: 150,
+    })
+    assert.deepEqual(filas, [
+      { numero: 1, fecha: "2026-10-11", valor: 100 },
+      { numero: 2, fecha: "2026-10-18", valor: 150 },
+    ])
+  })
+
+  it("el saldo que queda cuenta los cobros anteriores y no los anulados", () => {
+    const pagos = [
+      { id: "a", monto: 500, fecha: "2026-10-09", creadoEn: "2026-10-09T10:00:00.000Z", anulado: false },
+      { id: "b", monto: 200, fecha: "2026-10-09", creadoEn: "2026-10-09T11:00:00.000Z", anulado: true },
+      { id: "c", monto: 300, fecha: "2026-10-10", creadoEn: "2026-10-10T10:00:00.000Z", anulado: false },
+    ]
+    assert.equal(saldoTrasPago(12000, "a", pagos), 11500)
+    assert.equal(saldoTrasPago(12000, "b", pagos), 11500)
+    assert.equal(saldoTrasPago(12000, "c", pagos), 11200)
   })
 
   it("quien ya terminó las fechas y sigue debiendo aparece entre semana", () => {

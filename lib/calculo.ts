@@ -118,6 +118,47 @@ export function tocaHoy(prestamo: ParaCuotas, hoy: string): boolean {
   ).includes(hoy)
 }
 
+export function tablaCuotas(datos: {
+  fechaInicio: string
+  numeroCuotas: number
+  frecuencia: Frecuencia
+  cuota: number
+  cuotaUltima: number
+}): { numero: number; fecha: string; valor: number }[] {
+  const fechas = fechasCuotas(datos.fechaInicio, datos.numeroCuotas, datos.frecuencia)
+  return fechas.map((fecha, indice) => ({
+    numero: indice + 1,
+    fecha,
+    valor: indice === fechas.length - 1 ? datos.cuotaUltima : datos.cuota,
+  }))
+}
+
+export type PagoParaSaldo = {
+  id: string
+  monto: number
+  fecha: string
+  creadoEn: string
+  anulado: boolean
+}
+
+export function saldoTrasPago(total: number, pagoId: string, pagos: PagoParaSaldo[]): number {
+  const lista = [...pagos].sort((a, b) => {
+    if (a.fecha !== b.fecha) return a.fecha < b.fecha ? -1 : 1
+    if (a.creadoEn !== b.creadoEn) return a.creadoEn < b.creadoEn ? -1 : 1
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
+  })
+  let saldo = Math.round(total)
+  for (const pago of lista) {
+    if (pago.anulado) {
+      if (pago.id === pagoId) return Math.max(0, saldo)
+      continue
+    }
+    saldo -= Math.round(pago.monto)
+    if (pago.id === pagoId) return Math.max(0, saldo)
+  }
+  return Math.max(0, saldo)
+}
+
 export function sigueDebiendo(prestamo: ParaCuotas, hoy: string): boolean {
   if (prestamo.saldo <= 0 || tocaHoy(prestamo, hoy)) return false
   const fechas = fechasCuotas(

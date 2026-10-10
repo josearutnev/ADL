@@ -2,7 +2,9 @@
 
 import { useState } from "react"
 import { toast } from "sonner"
+import { BotonComprobante } from "@/components/boton-comprobante"
 import { Button } from "@/components/ui/button"
+import { cargarLogo, nombrePdf, pdfPago, type DatosPagoPdf } from "@/lib/comprobante"
 import {
   Dialog,
   DialogContent,
@@ -60,6 +62,7 @@ function FormularioCobro({
   const [fecha, setFecha] = useState(hoyLocal())
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState("")
+  const [listo, setListo] = useState<DatosPagoPdf | null>(null)
   const numero = Number(soloDigitos(monto))
   const hoy = hoyLocal()
   const atraso = atrasoDe(prestamo, hoy)
@@ -83,13 +86,41 @@ function FormularioCobro({
         cobradorId,
         cobradorNombre,
       })
-      toast.success(`Listo. El saldo queda en ${pesos(prestamo.saldo - numero)}.`)
-      onCerrar()
+      const saldo = prestamo.saldo - numero
+      toast.success(`Listo. El saldo queda en ${pesos(saldo)}.`)
+      setListo({
+        cliente: prestamo.clienteNombre,
+        fecha,
+        monto: numero,
+        saldo,
+        cobrador: cobradorNombre,
+      })
     } catch (fallo) {
       setError(mensajeError(fallo))
     } finally {
       setGuardando(false)
     }
+  }
+
+  if (listo) {
+    return (
+      <>
+        <DialogHeader>
+          <DialogTitle>Cobro guardado</DialogTitle>
+          <DialogDescription className="text-base">
+            {listo.cliente}. El saldo queda en {pesos(listo.saldo)}.
+          </DialogDescription>
+        </DialogHeader>
+        <BotonComprobante
+          variante="default"
+          nombre={nombrePdf("pago", listo.cliente)}
+          crear={async () => pdfPago(listo, await cargarLogo())}
+        />
+        <Button type="button" size="lg" variant="outline" onClick={onCerrar}>
+          Cerrar
+        </Button>
+      </>
+    )
   }
 
   return (

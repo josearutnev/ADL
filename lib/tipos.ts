@@ -1,4 +1,4 @@
-import type { Frecuencia } from "@/lib/calculo"
+import type { Frecuencia } from "./calculo.ts"
 
 export type { Frecuencia }
 

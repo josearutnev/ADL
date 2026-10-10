@@ -1,4 +1,4 @@
-import { parseFecha } from "@/lib/calculo"
+import { parseFecha } from "./calculo.ts"
 
 export function pesos(valor: number): string {
   const texto = new Intl.NumberFormat("es-CO", {
